@@ -1,7 +1,7 @@
 // src/components/QuestionCard.tsx
 import { useFormContext } from 'react-hook-form';
 import type { Question } from '../data/questions';
-import type { FormValues } from '../App';
+import type { QuizFormValues } from '../App';
 
 // Mendefinisikan props yang diterima oleh komponen ini
 interface QuestionCardProps {
@@ -24,8 +24,7 @@ const optionIcons = [
 ];
 
 export const QuestionCard = ({ question, index }: QuestionCardProps) => {
-  // Memberikan tipe eksplisit ke useFormContext
-  const { register, formState: { errors } } = useFormContext<FormValues>();
+  const { register, formState: { errors } } = useFormContext<QuizFormValues>();
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-md">
@@ -44,7 +43,6 @@ export const QuestionCard = ({ question, index }: QuestionCardProps) => {
                 <span className="ml-4 text-lg">{answer.text}</span>
               </div>
               
-              {/* Indikator centang yang hanya muncul saat dipilih */}
               <div className="opacity-0 group-has-[:checked]:opacity-100 transition-opacity">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -55,7 +53,7 @@ export const QuestionCard = ({ question, index }: QuestionCardProps) => {
                 type="radio"
                 value={answer.text}
                 {...register(`questions.${index}` as `questions.${number}`)}
-                className="absolute opacity-0 w-0 h-0" 
+                className="absolute opacity-0 w-0 h-0"
               />
             </label>
           );

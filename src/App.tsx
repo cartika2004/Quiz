@@ -8,111 +8,155 @@ import { Dialog } from '@headlessui/react';
 import { questions } from './data/questions';
 import { QuestionCard } from './components/QuestionCard';
 
-export type FormValues = {
+// --- Tipe dan Skema untuk Form Registrasi ---
+type RegistrationFormValues = {
+  name: string;
+  email: string;
+};
+
+const registrationSchema = yup.object().shape({
+  name: yup.string().required('Nama tidak boleh kosong'),
+  email: yup.string().email('Format email tidak valid').required('Email tidak boleh kosong'),
+});
+
+// --- Tipe dan Skema untuk Form Ujian ---
+export type QuizFormValues = {
   questions: string[];
 };
 
-const validationSchema = yup.object().shape({
+const quizSchema = yup.object().shape({
   questions: yup.array().of(yup.string().required('Pertanyaan ini harus dijawab')).default([]).length(questions.length),
 });
 
-const resolver: Resolver<FormValues> = yupResolver(validationSchema);
+const quizResolver: Resolver<QuizFormValues> = yupResolver(quizSchema);
+const UJIAN_DURATION = 600; 
 
-const UJIAN_DURATION = 600;
+// Komponen untuk Form Registrasi
+const RegistrationForm = ({ onRegister }: { onRegister: (data: RegistrationFormValues) => void }) => {
+  const { register, handleSubmit, formState: { errors } } = useForm<RegistrationFormValues>({
+    resolver: yupResolver(registrationSchema),
+  });
 
+  return (
+    <div className="bg-slate-900 min-h-screen w-full flex items-center justify-center p-4 font-sans">
+      <div className="w-full max-w-md">
+        <form onSubmit={handleSubmit(onRegister)} className="bg-white p-8 rounded-xl shadow-lg space-y-6">
+          <h1 className="text-3xl font-bold text-center text-slate-800">Registrasi Ujian</h1>
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-slate-700">Nama Lengkap</label>
+            <input
+              id="name"
+              type="text"
+              {...register('name')}
+              className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+            />
+            <p className="mt-1 text-sm text-red-600">{errors.name?.message}</p>
+          </div>
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-slate-700">Alamat Email</label>
+            <input
+              id="email"
+              type="email"
+              {...register('email')}
+              className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+            />
+            <p className="mt-1 text-sm text-red-600">{errors.email?.message}</p>
+          </div>
+          <button type="submit" className="w-full bg-purple-600 text-white font-bold py-3 rounded-lg hover:bg-purple-700 transition-colors">
+            Lanjut
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+
+// Komponen Utama Aplikasi
 export default function App() {
+  type AppStage = 'register' | 'start' | 'quiz' | 'result';
+  const [stage, setStage] = useState<AppStage>('register');
+  const [userName, setUserName] = useState('');
+
   const [isResultModalOpen, setResultModalOpen] = useState(false);
-  const [isStartModalOpen, setStartModalOpen] = useState(true);
   const [isWarningModalOpen, setWarningModalOpen] = useState(false);
   const [isConfirmModalOpen, setConfirmModalOpen] = useState(false);
   const [unansweredCount, setUnansweredCount] = useState(0);
   const [finalScore, setFinalScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(UJIAN_DURATION);
-  const [isQuizActive, setQuizActive] = useState(false);
-  const [isQuizFinished, setQuizFinished] = useState(false);
 
-  const methods = useForm<FormValues>({
-    resolver,
+  const quizMethods = useForm<QuizFormValues>({
+    resolver: quizResolver,
     defaultValues: { questions: [] },
   });
 
-  // --- Implementasi watch ---
-  // Kita "tonton" field 'questions'. Setiap kali ada jawaban baru,
-  // 'watchedQuestions' akan ter-update dan komponen ini akan re-render.
-  const watchedQuestions = methods.watch('questions');
+  const watchedQuestions = quizMethods.watch('questions');
   const answeredCount = Array.isArray(watchedQuestions) ? watchedQuestions.filter(Boolean).length : 0;
   const progressPercentage = (answeredCount / questions.length) * 100;
-  // -------------------------
 
-  const calculateAndSubmit = (data: Partial<FormValues>) => {
-    if (isQuizFinished) return; 
+  const calculateAndSubmit = (data: Partial<QuizFormValues>) => {
+    if (stage === 'result') return;
 
     let score = 0;
-    setQuizActive(false);
-    setQuizFinished(true); 
+    setStage('result');
 
     if (Array.isArray(data.questions)) {
-        data.questions.forEach((selectedAnswer, index) => {
-            if (questions[index] && questions[index].answers.find(a => a.correct)?.text === selectedAnswer) {
-                score++;
-            }
-        });
+      data.questions.forEach((selectedAnswer, index) => {
+        if (questions[index]?.answers.find(a => a.correct)?.text === selectedAnswer) {
+          score++;
+        }
+      });
     }
-
     setFinalScore(score);
     setResultModalOpen(true);
   };
 
   useEffect(() => {
-    if (!isQuizActive) return;
-
+    if (stage !== 'quiz') return;
     if (timeLeft <= 0) {
-      calculateAndSubmit(methods.getValues());
+      calculateAndSubmit(quizMethods.getValues());
       return;
     }
-
-    const intervalId = setInterval(() => {
-      setTimeLeft((prevTime) => prevTime - 1);
-    }, 1000);
-
+    const intervalId = setInterval(() => setTimeLeft(t => t - 1), 1000);
     return () => clearInterval(intervalId);
-  }, [timeLeft, isQuizActive, methods]);
+  }, [timeLeft, stage, quizMethods]);
 
-  const onSubmit: SubmitHandler<FormValues> = (data) => {
+  const onQuizSubmit: SubmitHandler<QuizFormValues> = (data) => {
     calculateAndSubmit(data);
   };
 
   const handleAttemptSubmit = () => {
-    const currentAnswers = methods.getValues('questions');
-    const answered = currentAnswers.filter(Boolean).length;
-    const unanswered = questions.length - answered;
+    const currentAnswers = quizMethods.getValues('questions');
+    const unanswered = questions.length - currentAnswers.filter(Boolean).length;
     setUnansweredCount(unanswered);
-
     if (unanswered > 0) {
       setWarningModalOpen(true);
     } else {
       setConfirmModalOpen(true);
     }
   };
-  
+
   const handleConfirmSubmit = () => {
     setConfirmModalOpen(false);
-    methods.handleSubmit(onSubmit)();
+    quizMethods.handleSubmit(onQuizSubmit)();
+  };
+
+  const handleRegister = (data: RegistrationFormValues) => {
+    setUserName(data.name);
+    setStage('start');
   };
 
   const handleStartQuiz = () => {
-    setStartModalOpen(false);
-    setQuizActive(true);
+    setStage('quiz');
   };
 
   const handleRestart = () => {
-    methods.reset();
+    quizMethods.reset();
     setFinalScore(0);
     setResultModalOpen(false);
     setTimeLeft(UJIAN_DURATION);
-    setStartModalOpen(true);
-    setQuizActive(false);
-    setQuizFinished(false);
+    setStage('register'); 
+    setUserName('');
   };
 
   const formatTime = (seconds: number) => {
@@ -121,34 +165,30 @@ export default function App() {
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
+  if (stage === 'register') {
+    return <RegistrationForm onRegister={handleRegister} />;
+  }
+
   return (
-    <FormProvider {...methods}>
+    <FormProvider {...quizMethods}>
       <div className="bg-slate-900 min-h-screen w-full flex items-center justify-center p-4 font-sans">
         <div className="w-full max-w-3xl space-y-4">
-          {/* Header dengan Progress Bar */}
           <div className="bg-white/10 p-4 rounded-xl shadow-lg">
             <div className="flex justify-between items-center mb-2">
               <h1 className="text-2xl font-extrabold text-white">Ujian Interaktif</h1>
-              {isQuizActive && (
+              {stage === 'quiz' && (
                 <div className="text-xl font-bold text-white bg-purple-600 px-3 py-1 rounded-lg">
                   {formatTime(timeLeft)}
                 </div>
               )}
             </div>
-            {/* Progress Bar Container */}
             <div className="w-full bg-slate-700 rounded-full h-4">
-              <div
-                className="bg-green-500 h-4 rounded-full transition-all duration-500"
-                style={{ width: `${progressPercentage}%` }}
-              ></div>
+              <div className="bg-green-500 h-4 rounded-full transition-all duration-500" style={{ width: `${progressPercentage}%` }}></div>
             </div>
-            <p className="text-right text-sm text-slate-300 mt-1">
-              {answeredCount} / {questions.length} terjawab
-            </p>
+            <p className="text-right text-sm text-slate-300 mt-1">{answeredCount} / {questions.length} terjawab</p>
           </div>
-
           <form>
-            <fieldset disabled={isQuizFinished} className="space-y-6">
+            <fieldset disabled={stage !== 'quiz'} className="space-y-6">
               {questions.map((q, index) => (
                 <QuestionCard key={index} question={q} index={index} />
               ))}
@@ -161,53 +201,37 @@ export default function App() {
       </div>
 
       {/* Pop-out Awal Ujian */}
-      <Dialog open={isStartModalOpen} onClose={() => {}} className="relative z-50">
-        <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
+      <Dialog open={stage === 'start'} onClose={() => {}} className="relative z-50">
+        <div className="fixed inset-0 bg-black/50" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
           <Dialog.Panel className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl text-center">
-            <Dialog.Title className="text-2xl font-bold text-slate-800">Selamat Datang!</Dialog.Title>
-            <p className="mt-4 text-slate-600">
-              Anda memiliki waktu <strong>{formatTime(UJIAN_DURATION)}</strong> untuk menyelesaikan ujian. Waktu akan dimulai saat Anda menekan tombol di bawah.
-            </p>
-            <button onClick={handleStartQuiz} className="mt-6 bg-green-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-green-600">
-              Mulai Ujian
-            </button>
+            <Dialog.Title className="text-2xl font-bold text-slate-800">Selamat Datang, {userName}!</Dialog.Title>
+            <p className="mt-4 text-slate-600">Anda memiliki waktu <strong>{formatTime(UJIAN_DURATION)}</strong> untuk menyelesaikan ujian. Waktu akan dimulai saat Anda menekan tombol di bawah.</p>
+            <button onClick={handleStartQuiz} className="mt-6 bg-green-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-green-600">Mulai Ujian</button>
           </Dialog.Panel>
         </div>
       </Dialog>
 
-      {/* Pop-out Peringatan Soal Kosong */}
+      {/* Pop-out Peringatan & Konfirmasi */}
       <Dialog open={isWarningModalOpen} onClose={() => setWarningModalOpen(false)} className="relative z-50">
-        <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
+        <div className="fixed inset-0 bg-black/50" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
           <Dialog.Panel className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl text-center">
             <Dialog.Title className="text-2xl font-bold text-yellow-500">Perhatian!</Dialog.Title>
-            <p className="mt-4 text-slate-600">
-              Masih ada <strong>{unansweredCount} soal</strong> yang belum terisi. Harap lengkapi jawaban Anda atau tunggu waktu habis.
-            </p>
-            <button onClick={() => setWarningModalOpen(false)} className="mt-6 bg-yellow-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-yellow-600">
-              Kembali Mengerjakan
-            </button>
+            <p className="mt-4 text-slate-600">Masih ada <strong>{unansweredCount} soal</strong> yang belum terisi. Harap lengkapi jawaban Anda atau tunggu waktu habis.</p>
+            <button onClick={() => setWarningModalOpen(false)} className="mt-6 bg-yellow-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-yellow-600">Kembali Mengerjakan</button>
           </Dialog.Panel>
         </div>
       </Dialog>
-
-      {/* Pop-out Konfirmasi Submit */}
       <Dialog open={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} className="relative z-50">
-        <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
+        <div className="fixed inset-0 bg-black/50" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
           <Dialog.Panel className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl text-center">
             <Dialog.Title className="text-2xl font-bold text-blue-600">Konfirmasi</Dialog.Title>
-            <p className="mt-4 text-slate-600">
-              Semua soal sudah terisi. Yakin ingin mengumpulkan ujian?
-            </p>
+            <p className="mt-4 text-slate-600">Semua soal sudah terisi. Yakin ingin mengumpulkan ujian?</p>
             <div className="mt-6 flex justify-center gap-4">
-              <button onClick={() => setConfirmModalOpen(false)} className="bg-gray-200 text-gray-800 px-6 py-2 rounded-lg font-bold hover:bg-gray-300">
-                Batal
-              </button>
-              <button onClick={handleConfirmSubmit} className="bg-purple-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-purple-700">
-                Ya, Kumpulkan
-              </button>
+              <button onClick={() => setConfirmModalOpen(false)} className="bg-gray-200 text-gray-800 px-6 py-2 rounded-lg font-bold hover:bg-gray-300">Batal</button>
+              <button onClick={handleConfirmSubmit} className="bg-purple-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-purple-700">Ya, Kumpulkan</button>
             </div>
           </Dialog.Panel>
         </div>
@@ -221,9 +245,7 @@ export default function App() {
             <Dialog.Title className="text-3xl font-bold text-slate-800">{timeLeft <= 0 ? "Waktu Habis!" : "Hasil Ujian"}</Dialog.Title>
             <p className="mt-4 text-xl text-slate-600">Skor Anda:</p>
             <p className="text-7xl font-extrabold my-4 text-purple-600">{finalScore} / {questions.length}</p>
-            <button onClick={handleRestart} className="mt-6 bg-purple-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-purple-700">
-              Coba Lagi
-            </button>
+            <button onClick={handleRestart} className="mt-6 bg-purple-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-purple-700">Coba Lagi</button>
           </Dialog.Panel>
         </div>
       </Dialog>
